@@ -1,0 +1,2162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Running Coach Pro - Plans & GPS</title>
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-hover: #263349;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #10b981;
+            --accent-glow: rgba(16, 185, 129, 0.25);
+            --accent-secondary: #fc4c02; /* Orange Strava */
+            --info: #3b82f6;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --border: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
+            padding-bottom: 90px;
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 16px;
+        }
+
+        /* Header & Plan Selector */
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(15, 23, 42, 0.94);
+            backdrop-filter: blur(12px);
+            padding: 12px 0 12px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 16px;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        h1 {
+            font-size: 1.25rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .stats-pill {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        /* Horizontal Plan Pills */
+        .plan-selector {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 10px;
+            scrollbar-width: none;
+        }
+        .plan-selector::-webkit-scrollbar {
+            display: none;
+        }
+
+        .plan-pill {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .plan-pill.active {
+            background: var(--accent-secondary);
+            border-color: var(--accent-secondary);
+            color: #ffffff;
+        }
+
+        .progress-container {
+            width: 100%;
+            height: 8px;
+            background-color: var(--bg-card);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #fc4c02, var(--accent));
+            border-radius: 999px;
+            transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
+
+        /* Navigation Bottom Bar */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(15, 23, 42, 0.96);
+            backdrop-filter: blur(14px);
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: center;
+            z-index: 150;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .nav-inner {
+            width: 100%;
+            max-width: 480px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .nav-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            padding: 10px 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            cursor: pointer;
+        }
+
+        .nav-btn.active {
+            color: var(--accent);
+        }
+
+        .nav-icon {
+            font-size: 1.15rem;
+        }
+
+        .view-section {
+            display: none;
+        }
+        .view-section.active {
+            display: block;
+        }
+
+        /* Plan Description Banner */
+        .plan-intro {
+            background: rgba(30, 41, 59, 0.6);
+            border-left: 3px solid var(--accent-secondary);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 14px;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+        }
+
+        /* Week Cards */
+        .week-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 15px;
+            margin-bottom: 14px;
+        }
+
+        .week-card.goal-reached {
+            border-color: rgba(16, 185, 129, 0.4);
+        }
+
+        .week-card.week-completed {
+            border-color: var(--accent);
+            box-shadow: 0 0 18px var(--accent-glow);
+        }
+
+        .week-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 8px;
+        }
+
+        .week-title-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .week-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .badge {
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 2px 7px;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .badge.reached {
+            display: inline-block;
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+        }
+
+        .badge.complete {
+            display: inline-block;
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+        }
+
+        .timer-btn {
+            background: rgba(252, 76, 2, 0.15);
+            color: #ff7a45;
+            border: 1px solid rgba(252, 76, 2, 0.4);
+            border-radius: 10px;
+            padding: 6px 10px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .timer-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Session Rows inside Week Card */
+        .sessions-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .session-item {
+            background: var(--bg-primary);
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.2s;
+        }
+
+        .session-item.checked {
+            background: rgba(16, 185, 129, 0.12);
+            border-color: var(--accent);
+        }
+
+        .session-info {
+            flex: 1;
+            cursor: pointer;
+        }
+
+        .session-top-line {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .session-type-tag {
+            font-size: 0.65rem;
+            padding: 1px 6px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .session-desc {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .session-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mini-play-btn {
+            background: rgba(252, 76, 2, 0.15);
+            border: 1px solid rgba(252, 76, 2, 0.35);
+            color: #ff7a45;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .check-circle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background: transparent;
+            color: transparent;
+            transition: all 0.2s;
+        }
+
+        .session-item.checked .check-circle {
+            background-color: var(--accent);
+            border-color: var(--accent);
+            color: #064e3b;
+        }
+
+        /* Journal & Stats View */
+        .summary-banner {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .stat-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 12px 6px;
+            text-align: center;
+        }
+
+        .stat-val {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: var(--accent);
+        }
+
+        .stat-lbl {
+            font-size: 0.68rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* Chart Container */
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 14px;
+            margin-bottom: 16px;
+        }
+
+        .chart-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: var(--text-primary);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .history-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 14px;
+            margin-bottom: 14px;
+        }
+
+        .history-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .history-title {
+            font-weight: 700;
+            font-size: 0.92rem;
+        }
+
+        .history-date {
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+        }
+
+        .history-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .h-tag {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            padding: 3px 8px;
+            border-radius: 8px;
+            font-size: 0.72rem;
+            color: var(--text-primary);
+        }
+
+        .gpx-btn {
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            color: #60a5fa;
+            padding: 3px 8px;
+            border-radius: 8px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .history-note {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            background: rgba(15, 23, 42, 0.45);
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-style: italic;
+        }
+
+        .history-map {
+            height: 155px;
+            width: 100%;
+            border-radius: 12px;
+            margin-top: 10px;
+            z-index: 1;
+            border: 1px solid var(--border);
+        }
+
+        /* Settings / Backup View */
+        .settings-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 14px;
+        }
+
+        .settings-title {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .settings-desc {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .settings-btn-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            flex: 1;
+            min-width: 130px;
+            padding: 11px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        /* Modals */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(8px);
+            z-index: 200;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            width: 100%;
+            max-width: 420px;
+            padding: 18px;
+            position: relative;
+            max-height: 96vh;
+            overflow-y: auto;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        /* Timer & Strava Live GPS Modal */
+        .timer-center {
+            text-align: center;
+        }
+
+        .timer-week-label {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            padding-right: 32px;
+        }
+
+        .phase-badge {
+            display: inline-block;
+            margin: 6px 0 2px;
+            padding: 4px 14px;
+            border-radius: 999px;
+            font-size: 0.92rem;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .phase-run {
+            background: rgba(252, 76, 2, 0.2);
+            color: #ff7a45;
+            border: 1px solid var(--accent-secondary);
+        }
+
+        .phase-walk {
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            border: 1px solid var(--info);
+        }
+
+        .phase-paused {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+            border: 1px solid var(--warning);
+        }
+
+        .phase-done {
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            border: 1px solid var(--accent);
+        }
+
+        .timer-display {
+            font-size: 3.2rem;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            line-height: 1.05;
+            margin: 2px 0;
+        }
+
+        .timer-rep {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        /* Toggles bar inside Timer (Voice & Auto-Pause) */
+        .timer-options-bar {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .opt-chip {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .opt-chip.active {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: rgba(16, 185, 129, 0.12);
+        }
+
+        /* Strava 6-metrics Grid */
+        .strava-metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .strava-box {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 6px 4px;
+            text-align: center;
+        }
+
+        .strava-val {
+            font-size: 1rem;
+            font-weight: 800;
+            color: #f8fafc;
+        }
+
+        .strava-val.highlight {
+            color: #ff7a45;
+        }
+
+        .strava-lbl {
+            font-size: 0.62rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-top: 1px;
+        }
+
+        #live-map {
+            height: 165px;
+            width: 100%;
+            border-radius: 12px;
+            margin-bottom: 8px;
+            z-index: 1;
+            border: 1px solid var(--border);
+        }
+
+        .gps-status {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+
+        .timer-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .ctrl-btn {
+            flex: 1;
+            padding: 12px;
+            border-radius: 12px;
+            border: none;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-start {
+            background: var(--accent-secondary);
+            color: #ffffff;
+        }
+
+        .btn-pause {
+            background: var(--warning);
+            color: #451a03;
+        }
+
+        .btn-finish {
+            background: var(--accent);
+            color: #064e3b;
+        }
+
+        .btn-reset-timer {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        /* Journal Entry Form */
+        .form-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            margin-bottom: 12px;
+            padding-right: 28px;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+
+        .form-input, .form-textarea {
+            width: 100%;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 9px 11px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.88rem;
+        }
+
+        .feeling-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .feeling-btn {
+            background: var(--bg-primary);
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 4px;
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .feeling-btn.selected {
+            border-color: var(--accent);
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--text-primary);
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .btn-danger-outline {
+            background: transparent;
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 11px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.82rem;
+            cursor: pointer;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 36px 16px;
+            color: var(--text-secondary);
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px dashed var(--border);
+        }
+
+        #confetti-canvas {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 300;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="confetti-canvas"></canvas>
+
+<div class="container">
+    <header>
+        <div class="header-top">
+            <h1>🏃‍♂️ Running Coach Pro</h1>
+            <div class="stats-pill" id="total-counter">0 / 12 séances</div>
+        </div>
+        <!-- Sélecteur d'Objectifs -->
+        <div class="plan-selector" id="plan-selector"></div>
+
+        <div class="progress-container">
+            <div class="progress-bar" id="global-progress-bar"></div>
+        </div>
+        <div class="progress-label">
+            <span id="motivation-text">C'est parti !</span>
+            <span id="percent-text">0%</span>
+        </div>
+    </header>
+
+    <!-- VUE 1 : PROGRAMME D'ENTRAÎNEMENT -->
+    <div id="view-plan" class="view-section active">
+        <div class="plan-intro" id="plan-intro-text"></div>
+        <main id="weeks-container"></main>
+    </div>
+
+    <!-- VUE 2 : JOURNAL, GRAPHIQUES & CARTES -->
+    <div id="view-journal" class="view-section">
+        <div class="summary-banner">
+            <div class="stat-box">
+                <div class="stat-val" id="stat-total-runs">0</div>
+                <div class="stat-lbl">Sorties</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val" id="stat-total-km">0.00 km</div>
+                <div class="stat-lbl">Distance GPS</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val" id="stat-total-min">0 min</div>
+                <div class="stat-lbl">Temps actif</div>
+            </div>
+        </div>
+
+        <!-- Graphique d'évolution SVG -->
+        <div class="chart-card" id="chart-container" style="display:none;">
+            <div class="chart-title">
+                <span>📈 Évolution des distances (km)</span>
+                <span style="color:var(--accent); font-size:0.75rem;" id="chart-max-lbl"></span>
+            </div>
+            <div id="svg-chart-box"></div>
+        </div>
+
+        <div id="journal-list"></div>
+    </div>
+
+    <!-- VUE 3 : OUTILS & SAUVEGARDE -->
+    <div id="view-settings" class="view-section">
+        <div class="settings-card">
+            <div class="settings-title">💾 Sauvegarde & Restauration</div>
+            <div class="settings-desc">Exporte tout ton historique, tes parcours GPS et tes plans validés au format JSON pour ne jamais rien perdre.</div>
+            <div class="settings-btn-row">
+                <button class="action-btn" onclick="exportBackupJSON()">⬇️ Exporter JSON</button>
+                <button class="action-btn" onclick="document.getElementById('import-file').click()">⬆️ Importer JSON</button>
+                <input type="file" id="import-file" accept=".json" style="display:none;" onchange="importBackupJSON(event)">
+            </div>
+        </div>
+
+        <div class="settings-card">
+            <div class="settings-title">📱 Conseils Terrain iPhone</div>
+            <div class="settings-desc">
+                • <b>Écran toujours actif (Wake Lock) :</b> L'écran reste allumé automatiquement pendant tes sorties GPS.<br>
+                • <b>Coach Vocal :</b> Les transitions course/marche sont annoncées à voix haute dans tes écouteurs.<br>
+                • <b>Export Strava (.GPX) :</b> Chaque sortie enregistrée avec le GPS dispose d'un bouton GPX dans ton journal.
+            </div>
+        </div>
+
+        <div class="settings-card" style="border-color: rgba(239, 68, 68, 0.3);">
+            <div class="settings-title" style="color:var(--danger);">⚠️ Zone de réinitialisation</div>
+            <div class="settings-desc">Remet à zéro uniquement l'objectif sélectionné ou l'intégralité de l'application.</div>
+            <div class="settings-btn-row">
+                <button class="action-btn" style="color:var(--warning);" onclick="resetCurrentPlan()">Reset objectif actuel</button>
+                <button class="action-btn" style="color:var(--danger);" onclick="resetAllData()">Tout effacer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Barre de navigation inférieure -->
+<nav class="bottom-nav">
+    <div class="nav-inner">
+        <button class="nav-btn active" id="nav-plan" onclick="switchTab('plan')">
+            <span class="nav-icon">📋</span>
+            <span>Plans</span>
+        </button>
+        <button class="nav-btn" id="nav-journal" onclick="switchTab('journal')">
+            <span class="nav-icon">📖</span>
+            <span>Journal & Stats</span>
+        </button>
+        <button class="nav-btn" id="nav-settings" onclick="switchTab('settings')">
+            <span class="nav-icon">⚙️</span>
+            <span>Outils & GPX</span>
+        </button>
+    </div>
+</nav>
+
+<!-- MODAL 1 : MINUTEUR FRACTIONNÉ + GPS STRAVA + VOCAL + AUTO-PAUSE -->
+<div class="modal-overlay" id="timer-modal">
+    <div class="modal-box timer-center">
+        <button class="close-modal" onclick="closeTimer()">✕</button>
+        <div class="timer-week-label" id="modal-week-title">Séance</div>
+        <div class="phase-badge phase-run" id="modal-phase">COURSE</div>
+        <div class="timer-display" id="modal-time">01:00</div>
+        <div class="timer-rep" id="modal-rep">Bloc 1 / 8</div>
+
+        <!-- Options intelligentes : Coach Vocal, Auto-Pause, WakeLock -->
+        <div class="timer-options-bar">
+            <button type="button" class="opt-chip active" id="chip-voice" onclick="toggleOption('voice')">🗣️ Coach Vocal</button>
+            <button type="button" class="opt-chip active" id="chip-autopause" onclick="toggleOption('autopause')">⏸️ Auto-Pause</button>
+            <span class="opt-chip active" id="chip-wakelock">🔆 Écran actif</span>
+        </div>
+
+        <!-- Dashboard 6 métriques (Dist, Allure Course, Allure Globale, Vitesse, Temps Course, Temps Total) -->
+        <div class="strava-metrics-grid">
+            <div class="strava-box">
+                <div class="strava-val" id="strava-dist">0.00 km</div>
+                <div class="strava-lbl">Distance</div>
+            </div>
+            <div class="strava-box">
+                <div class="strava-val highlight" id="strava-run-pace">--'--"/km</div>
+                <div class="strava-lbl">Allure Course</div>
+            </div>
+            <div class="strava-box">
+                <div class="strava-val" id="strava-speed">0.0 km/h</div>
+                <div class="strava-lbl">Vitesse</div>
+            </div>
+            <div class="strava-box">
+                <div class="strava-val" id="strava-global-pace">--'--"/km</div>
+                <div class="strava-lbl">Allure Moy.</div>
+            </div>
+            <div class="strava-box">
+                <div class="strava-val" id="strava-run-time">00:00</div>
+                <div class="strava-lbl">Temps Course</div>
+            </div>
+            <div class="strava-box">
+                <div class="strava-val" id="strava-chrono">00:00</div>
+                <div class="strava-lbl">Temps Total</div>
+            </div>
+        </div>
+
+        <!-- Carte OpenStreetMap détaillée -->
+        <div id="live-map"></div>
+        <div class="gps-status" id="gps-status-text">🛰️ Recherche signal GPS...</div>
+
+        <div class="timer-controls">
+            <button class="ctrl-btn btn-start" id="modal-toggle-btn" onclick="toggleTimer()">Démarrer</button>
+            <button class="ctrl-btn btn-finish" id="modal-finish-btn" onclick="finishSessionEarly()" style="display:none;">Terminer</button>
+            <button class="ctrl-btn btn-reset-timer" onclick="resetTimer()">Reset</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL 2 : FICHE VALIDATION SÉANCE -->
+<div class="modal-overlay" id="log-modal">
+    <div class="modal-box">
+        <button class="close-modal" onclick="closeLogModal()">✕</button>
+        <div class="form-title" id="log-modal-title">Valider la séance</div>
+
+        <div class="form-group">
+            <label class="form-label">Date de la sortie</label>
+            <input type="date" id="log-date" class="form-input">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Ressenti physique</label>
+            <div class="feeling-grid">
+                <button type="button" class="feeling-btn" data-val="Facile" onclick="selectFeeling('Facile')">
+                    <span style="font-size:1.25rem;">😊</span>
+                    <span>Facile</span>
+                </button>
+                <button type="button" class="feeling-btn selected" data-val="Moyen" onclick="selectFeeling('Moyen')">
+                    <span style="font-size:1.25rem;">😐</span>
+                    <span>Moyen</span>
+                </button>
+                <button type="button" class="feeling-btn" data-val="Difficile" onclick="selectFeeling('Difficile')">
+                    <span style="font-size:1.25rem;">🥵</span>
+                    <span>Difficile</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Distance parcourue (km)</label>
+            <input type="number" step="0.01" id="log-distance" class="form-input" placeholder="Ex: 5.20">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Notes & sensations</label>
+            <textarea id="log-notes" rows="2" class="form-textarea" placeholder="Allure, cardio, météo, parcours..."></textarea>
+        </div>
+
+        <div class="form-actions">
+            <button type="button" class="btn-danger-outline" id="log-delete-btn" onclick="uncheckRun()" style="display:none;">Décocher</button>
+            <button type="button" class="ctrl-btn btn-finish" onclick="saveRunLog()">Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* ==========================================================================
+       1. BASE DE DONNÉES DES PLANS D'ENTRAÎNEMENT (Reprise, 5km, 10km, 15km, 20km)
+       ========================================================================== */
+    const PLANS_CATALOG = {
+        reprise: {
+            id: 'reprise',
+            shortName: '🌱 Reprise (4 sem.)',
+            title: 'Plan Reprise en douceur',
+            description: 'Objectif : réhabituer les articulations et le souffle pour atteindre 20 min de course continue sans s'essouffler.',
+            weeks: [
+                {
+                    week: 1, title: 'Semaine 1 • Mise en route', minRequired: 2,
+                    sessions: [
+                        { type: 'Fractionné', title: 'Séance 1', desc: '(1 min course / 2 min marche) × 8 • ~24 min', runSec: 60, walkSec: 120, reps: 8, estMin: 24 },
+                        { type: 'Fractionné', title: 'Séance 2', desc: '(1 min course / 2 min marche) × 8 • ~24 min', runSec: 60, walkSec: 120, reps: 8, estMin: 24 },
+                        { type: 'Bonus', title: 'Séance 3 (Option)', desc: '(1 min course / 2 min marche) × 8 • ~24 min', runSec: 60, walkSec: 120, reps: 8, estMin: 24 }
+                    ]
+                },
+                {
+                    week: 2, title: 'Semaine 2 • Progression', minRequired: 2,
+                    sessions: [
+                        { type: 'Fractionné', title: 'Séance 1', desc: '(2 min course / 2 min marche) × 7 • ~28 min', runSec: 120, walkSec: 120, reps: 7, estMin: 28 },
+                        { type: 'Fractionné', title: 'Séance 2', desc: '(2 min course / 2 min marche) × 7 • ~28 min', runSec: 120, walkSec: 120, reps: 7, estMin: 28 },
+                        { type: 'Bonus', title: 'Séance 3 (Option)', desc: '(2 min course / 2 min marche) × 7 • ~28 min', runSec: 120, walkSec: 120, reps: 7, estMin: 28 }
+                    ]
+                },
+                {
+                    week: 3, title: 'Semaine 3 • Endurance', minRequired: 2,
+                    sessions: [
+                        { type: 'Fractionné', title: 'Séance 1', desc: '(3 min course / 1 min marche) × 6 • 24 min', runSec: 180, walkSec: 60, reps: 6, estMin: 24 },
+                        { type: 'Fractionné', title: 'Séance 2', desc: '(3 min course / 1 min marche) × 6 • 24 min', runSec: 180, walkSec: 60, reps: 6, estMin: 24 },
+                        { type: 'Bonus', title: 'Séance 3 (Option)', desc: '(3 min course / 1 min marche) × 6 • 24 min', runSec: 180, walkSec: 60, reps: 6, estMin: 24 }
+                    ]
+                },
+                {
+                    week: 4, title: 'Semaine 4 • Cap 20 min', minRequired: 2,
+                    sessions: [
+                        { type: 'Fractionné', title: 'Séance 1', desc: '(5 min course / 1 min marche) × 4 • 24 min', runSec: 300, walkSec: 60, reps: 4, estMin: 24 },
+                        { type: 'Fractionné', title: 'Séance 2', desc: '(5 min course / 1 min marche) × 4 • 24 min', runSec: 300, walkSec: 60, reps: 4, estMin: 24 },
+                        { type: 'Test', title: 'Séance 3 (Défi)', desc: '20 min de course continue à allure lente', runSec: 1200, walkSec: 0, reps: 1, estMin: 20 }
+                    ]
+                }
+            ]
+        },
+        obj5k: {
+            id: 'obj5k',
+            shortName: '🥉 Objectif 5 km',
+            title: 'Préparation 5 km (4 sem.)',
+            description: 'Objectif : courir 5 km en continu avec aisance en combinant endurance fondamentale et petites accélérations.',
+            weeks: [
+                {
+                    week: 1, title: 'Semaine 1 • Socle Aérobie', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Endurance douce', desc: '25 min en continu en aisance respiratoire', runSec: 1500, walkSec: 0, reps: 1, estMin: 25 },
+                        { type: 'Fractionné', title: 'Variations d'allure', desc: '(2 min vite / 1 min lent) × 8 + 5 min calme', runSec: 120, walkSec: 60, reps: 8, estMin: 29 },
+                        { type: 'Sortie longue', title: 'Sortie 3,5 km', desc: '30 min souple (environ 3,5 à 4 km)', runSec: 1800, walkSec: 0, reps: 1, estMin: 30 }
+                    ]
+                },
+                {
+                    week: 2, title: 'Semaine 2 • Rythme 5 km', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Endurance 30 min', desc: '30 min en continu à allure confortable', runSec: 1800, walkSec: 0, reps: 1, estMin: 30 },
+                        { type: 'Seuil', title: 'Blocs allure 5 km', desc: '(4 min allure 5km / 1 min 30 récup) × 5', runSec: 240, walkSec: 90, reps: 5, estMin: 28 },
+                        { type: 'Sortie longue', title: 'Sortie 4 km', desc: '35 min en continu sans forcer', runSec: 2100, walkSec: 0, reps: 1, estMin: 35 }
+                    ]
+                },
+                {
+                    week: 3, title: 'Semaine 3 • Volume Max', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Footing récupération', desc: '30 min très tranquille', runSec: 1800, walkSec: 0, reps: 1, estMin: 30 },
+                        { type: 'Fractionné', title: 'Pyramide VMA', desc: '(1 min vite / 1 min lent) × 10', runSec: 60, walkSec: 60, reps: 10, estMin: 25 },
+                        { type: 'Sortie longue', title: 'Sortie 4,5 km', desc: '40 min en continu (proche de la distance cible)', runSec: 2400, walkSec: 0, reps: 1, estMin: 40 }
+                    ]
+                },
+                {
+                    week: 4, title: 'Semaine 4 • Affûtage & Course', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Footing léger', desc: '25 min souple pour garder du jus', runSec: 1500, walkSec: 0, reps: 1, estMin: 25 },
+                        { type: 'Rappel', title: 'Réveil musculaire', desc: '(1 min allure 5km / 2 min lent) × 5', runSec: 60, walkSec: 120, reps: 5, estMin: 18 },
+                        { type: 'Objectif 🏆', title: 'JOUR J : 5 KM', desc: 'Course continue de 5 km • Gestion régulière !', runSec: 2100, walkSec: 0, reps: 1, estMin: 35 }
+                    ]
+                }
+            ]
+        },
+        obj10k: {
+            id: 'obj10k',
+            shortName: '🥈 Objectif 10 km',
+            title: 'Préparation 10 km (4 sem.)',
+            description: 'Objectif : franchir le cap symbolique des 10 km en continu grâce au travail au seuil et à l'allongement des sorties.',
+            weeks: [
+                {
+                    week: 1, title: 'Semaine 1 • Base 6-7 km', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Endurance 40 min', desc: '40 min en aisance respiratoire (~6 km)', runSec: 2400, walkSec: 0, reps: 1, estMin: 40 },
+                        { type: 'Fractionné', title: '30/30 Dynamique', desc: '(30 sec vite / 30 sec lent) × 15 + échauff.', runSec: 30, walkSec: 30, reps: 15, estMin: 30 },
+                        { type: 'Sortie longue', title: 'Sortie 7 km', desc: '45 à 50 min à allure régulière', runSec: 2800, walkSec: 0, reps: 1, estMin: 47 }
+                    ]
+                },
+                {
+                    week: 2, title: 'Semaine 2 • Allure Spécifique', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Endurance 45 min', desc: '45 min souple en zone confort', runSec: 2700, walkSec: 0, reps: 1, estMin: 45 },
+                        { type: 'Seuil', title: 'Blocs 10 km', desc: '(6 min allure 10km / 2 min récup) × 4', runSec: 360, walkSec: 120, reps: 4, estMin: 32 },
+                        { type: 'Sortie longue', title: 'Sortie 8 km', desc: '55 min en continu (hydratation conseillée)', runSec: 3300, walkSec: 0, reps: 1, estMin: 55 }
+                    ]
+                },
+                {
+                    week: 3, title: 'Semaine 3 • Pic d'Endurance', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Footing 40 min', desc: '40 min récupération active', runSec: 2400, walkSec: 0, reps: 1, estMin: 40 },
+                        { type: 'Seuil', title: 'Résistance longue', desc: '(8 min allure 10km / 2 min récup) × 3', runSec: 480, walkSec: 120, reps: 3, estMin: 35 },
+                        { type: 'Sortie longue', title: 'Sortie 9 km', desc: '1h00 en continu à allure modérée', runSec: 3600, walkSec: 0, reps: 1, estMin: 60 }
+                    ]
+                },
+                {
+                    week: 4, title: 'Semaine 4 • Semaine 10 km', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Footing léger', desc: '30 min très souple', runSec: 1800, walkSec: 0, reps: 1, estMin: 30 },
+                        { type: 'Rappel', title: 'Rappel d'allure', desc: '(3 min allure 10km / 2 min lent) × 3', runSec: 180, walkSec: 120, reps: 3, estMin: 20 },
+                        { type: 'Objectif 🏆', title: 'JOUR J : 10 KM', desc: '10 km en continu • Pars prudemment sur les 3 premiers km !', runSec: 3900, walkSec: 0, reps: 1, estMin: 65 }
+                    ]
+                }
+            ]
+        },
+        obj15k: {
+            id: 'obj15k',
+            shortName: '🥇 Objectif 15 km',
+            title: 'Préparation 15 km (4 sem.)',
+            description: 'Objectif : développer une solide endurance musculaire et énergétique pour tenir 1h15 à 1h35 d'effort.',
+            weeks: [
+                {
+                    week: 1, title: 'Semaine 1 • Cap 11 km', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Endurance 50 min', desc: '50 min en aisance fondamentale', runSec: 3000, walkSec: 0, reps: 1, estMin: 50 },
+                        { type: 'Fractionné', title: 'Intervalles moyens', desc: '(3 min soutenu / 1 min 30 trot) × 7', runSec: 180, walkSec: 90, reps: 7, estMin: 38 },
+                        { type: 'Sortie longue', title: 'Sortie 11 km', desc: '1h10 à allure endurance', runSec: 4200, walkSec: 0, reps: 1, estMin: 70 }
+                    ]
+                },
+                {
+                    week: 2, title: 'Semaine 2 • Cap 12,5 km', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Endurance 55 min', desc: '55 min souple avec foulée relâchée', runSec: 3300, walkSec: 0, reps: 1, estMin: 55 },
+                        { type: 'Seuil', title: 'Tempo 15 km', desc: '(10 min allure 15km / 2 min 30 trot) × 3', runSec: 600, walkSec: 150, reps: 3, estMin: 42 },
+                        { type: 'Sortie longue', title: 'Sortie 12,5 km', desc: '1h20 avec ravitaillement eau/gel', runSec: 4800, walkSec: 0, reps: 1, estMin: 80 }
+                    ]
+                },
+                {
+                    week: 3, title: 'Semaine 3 • Cap 13,5 km', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Footing 50 min', desc: '50 min récupération active', runSec: 3000, walkSec: 0, reps: 1, estMin: 50 },
+                        { type: 'Seuil', title: 'Bloc long', desc: '(12 min allure 15km / 3 min trot) × 2', runSec: 720, walkSec: 180, reps: 2, estMin: 40 },
+                        { type: 'Sortie longue', title: 'Sortie 13,5 km', desc: '1h25 à 1h30 en gestion d'effort', runSec: 5100, walkSec: 0, reps: 1, estMin: 85 }
+                    ]
+                },
+                {
+                    week: 4, title: 'Semaine 4 • Défi 15 km', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Footing léger', desc: '35 min souple pour assimiler', runSec: 2100, walkSec: 0, reps: 1, estMin: 35 },
+                        { type: 'Rappel', title: 'Activation', desc: '(4 min allure 15km / 2 min trot) × 3', runSec: 240, walkSec: 120, reps: 3, estMin: 25 },
+                        { type: 'Objectif 🏆', title: 'JOUR J : 15 KM', desc: '15 km en continu • Hydrate-toi toutes les 25 min !', runSec: 5400, walkSec: 0, reps: 1, estMin: 90 }
+                    ]
+                }
+            ]
+        },
+        obj20k: {
+            id: 'obj20k',
+            shortName: '🏆 Objectif 20 km / Semi',
+            title: 'Préparation 20 km / Semi-Marathon (4 sem.)',
+            description: 'Objectif : préparer la distance reine du demi-fond (20 à 21,1 km) avec gestion énergétique et sorties longues.',
+            weeks: [
+                {
+                    week: 1, title: 'Semaine 1 • Fondations 14 km', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Endurance 1h00', desc: '60 min en aisance respiratoire totale', runSec: 3600, walkSec: 0, reps: 1, estMin: 60 },
+                        { type: 'Fractionné', title: 'VMA Longue', desc: '(4 min soutenu / 1 min 30 trot) × 6', runSec: 240, walkSec: 90, reps: 6, estMin: 40 },
+                        { type: 'Sortie longue', title: 'Sortie 14 km', desc: '1h30 en endurance fondamentale', runSec: 5400, walkSec: 0, reps: 1, estMin: 90 }
+                    ]
+                },
+                {
+                    week: 2, title: 'Semaine 2 • Allure Semi 16 km', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Endurance 1h00', desc: '60 min souple', runSec: 3600, walkSec: 0, reps: 1, estMin: 60 },
+                        { type: 'Seuil', title: 'Allure Semi-Marathon', desc: '(12 min allure 20km / 3 min trot) × 3', runSec: 720, walkSec: 180, reps: 3, estMin: 50 },
+                        { type: 'Sortie longue', title: 'Sortie 16 km', desc: '1h40 avec test de nutrition/hydratation', runSec: 6000, walkSec: 0, reps: 1, estMin: 100 }
+                    ]
+                },
+                {
+                    week: 3, title: 'Semaine 3 • Pic Volume 18 km', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Footing 50 min', desc: '50 min récupération', runSec: 3000, walkSec: 0, reps: 1, estMin: 50 },
+                        { type: 'Seuil', title: 'Double bloc long', desc: '(15 min allure 20km / 3 min trot) × 2', runSec: 900, walkSec: 180, reps: 2, estMin: 45 },
+                        { type: 'Sortie longue', title: 'Sortie 18 km', desc: '1h50 à 2h00 en endurance pure', runSec: 6600, walkSec: 0, reps: 1, estMin: 110 }
+                    ]
+                },
+                {
+                    week: 4, title: 'Semaine 4 • Objectif 20 km', minRequired: 3,
+                    sessions: [
+                        { type: 'Footing', title: 'Footing léger', desc: '40 min très facile', runSec: 2400, walkSec: 0, reps: 1, estMin: 40 },
+                        { type: 'Rappel', title: 'Rappel de rythme', desc: '(5 min allure 20km / 2 min trot) × 2', runSec: 300, walkSec: 120, reps: 2, estMin: 22 },
+                        { type: 'Objectif 🏆', title: 'JOUR J : 20 KM', desc: '20 km / Semi-Marathon • Régularité et plaisir !', runSec: 7200, walkSec: 0, reps: 1, estMin: 120 }
+                    ]
+                }
+            ]
+        }
+    };
+
+    /* ==========================================================================
+       2. GESTION DU STOCKAGE & ÉTAT GLOBAL
+       ========================================================================== */
+    const STORAGE_KEY = 'running_coach_pro_v5';
+    let appState = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
+        activePlanId: 'reprise',
+        plansData: {} // Structure : { reprise: { 1: [null, null, null], ... }, obj5k: { ... } }
+    };
+
+    function ensurePlanInitialized(planId) {
+        if (!appState.plansData[planId]) {
+            appState.plansData[planId] = {
+                1: [null, null, null],
+                2: [null, null, null],
+                3: [null, null, null],
+                4: [null, null, null]
+            };
+        }
+    }
+
+    Object.keys(PLANS_CATALOG).forEach(ensurePlanInitialized);
+
+    function saveStorage() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+    }
+
+    function selectPlan(planId) {
+        appState.activePlanId = planId;
+        ensurePlanInitialized(planId);
+        saveStorage();
+        renderPlanSelector();
+        renderPlan();
+    }
+
+    function switchTab(tab) {
+        document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+
+        document.getElementById(`view-${tab}`).classList.add('active');
+        document.getElementById(`nav-${tab}`).classList.add('active');
+
+        if (tab === 'journal') {
+            renderJournal();
+        }
+    }
+
+    /* ==========================================================================
+       3. RENDU DE L'INTERFACE (SÉLECTEUR & SEMAINES)
+       ========================================================================== */
+    function renderPlanSelector() {
+        const container = document.getElementById('plan-selector');
+        container.innerHTML = Object.values(PLANS_CATALOG).map(p => `
+            <button class="plan-pill ${p.id === appState.activePlanId ? 'active' : ''}" 
+                    onclick="selectPlan('${p.id}')">
+                ${p.shortName}
+            </button>
+        `).join('');
+    }
+
+    function renderPlan() {
+        const plan = PLANS_CATALOG[appState.activePlanId];
+        const planProgress = appState.plansData[plan.id];
+
+        document.getElementById('plan-intro-text').innerHTML = `<strong>${plan.title} :</strong> ${plan.description}`;
+
+        const container = document.getElementById('weeks-container');
+        container.innerHTML = '';
+
+        let totalChecked = 0;
+        let totalSessions = 0;
+
+        plan.weeks.forEach(w => {
+            const weekRuns = planProgress[w.week];
+            const checkedCount = weekRuns.filter(r => r !== null).length;
+            totalChecked += checkedCount;
+            totalSessions += w.sessions.length;
+
+            const isComplete = checkedCount === w.sessions.length;
+            const isGoalReached = checkedCount >= w.minRequired && !isComplete;
+
+            const card = document.createElement('section');
+            card.className = `week-card ${isGoalReached ? 'goal-reached' : ''} ${isComplete ? 'week-completed' : ''}`;
+
+            let badgeHTML = '';
+            if (isComplete) {
+                badgeHTML = `<span class="badge complete">Semaine 100% validée !</span>`;
+            } else if (isGoalReached) {
+                badgeHTML = `<span class="badge reached">Objectif atteint</span>`;
+            }
+
+            card.innerHTML = `
+                <div class="week-header">
+                    <div class="week-title-group">
+                        <h2 class="week-title">${w.title}</h2>
+                        ${badgeHTML}
+                    </div>
+                </div>
+                <div class="sessions-list">
+                    ${w.sessions.map((sess, idx) => {
+                        const runData = weekRuns[idx];
+                        const isChecked = runData !== null;
+                        const feelingEmoji = isChecked ? (runData.feeling === 'Facile' ? '😊' : runData.feeling === 'Difficile' ? '🥵' : '😐') : '';
+                        const dateBadge = isChecked ? ` • ${runData.date.slice(5).split('-').reverse().join('/')}` : '';
+                        const distBadge = (isChecked && runData.distance) ? ` • ${parseFloat(runData.distance).toFixed(2)} km` : '';
+
+                        return `
+                        <div class="session-item ${isChecked ? 'checked' : ''}">
+                            <div class="session-info" onclick="openLogModal('${plan.id}', ${w.week}, ${idx})">
+                                <div class="session-top-line">
+                                    <span>${sess.title} ${feelingEmoji}</span>
+                                    <span class="session-type-tag">${sess.type}</span>
+                                </div>
+                                <div class="session-desc">
+                                    ${sess.desc}
+                                    ${isChecked ? `<span style="color:var(--accent); font-weight:600;">${dateBadge}${distBadge}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="session-actions">
+                                <button class="mini-play-btn" title="Lancer le chrono GPS" onclick="openTimer('${plan.id}', ${w.week}, ${idx})">
+                                    ▶️
+                                </button>
+                                <button class="check-circle" title="Valider la séance" onclick="openLogModal('${plan.id}', ${w.week}, ${idx})">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+            container.appendChild(card);
+        });
+
+        const pct = Math.round((totalChecked / totalSessions) * 100);
+        document.getElementById('total-counter').textContent = `${totalChecked} / ${totalSessions} séances`;
+        document.getElementById('global-progress-bar').style.width = `${pct}%`;
+        document.getElementById('percent-text').textContent = `${pct}%`;
+
+        let msg = "C'est parti pour cet objectif !";
+        if (pct > 0 && pct < 50) msg = "Bon rythme, continue sur cette lancée !";
+        else if (pct >= 50 && pct < 100) msg = "Plus de la moitié du plan accomplie 💪";
+        else if (pct === 100) msg = "Objectif 100% accompli ! Passe au palier suivant 🏆";
+        document.getElementById('motivation-text').textContent = msg;
+    }
+
+    /* ==========================================================================
+       4. JOURNAL GLOBAL, GRAPHIQUE SVG & EXPORT GPX
+       ========================================================================== */
+    let historyMaps = [];
+    let cachedEntries = [];
+
+    function renderJournal() {
+        const listEl = document.getElementById('journal-list');
+        listEl.innerHTML = '';
+        historyMaps.forEach(m => m.remove());
+        historyMaps = [];
+        cachedEntries = [];
+
+        let totalKm = 0;
+        let totalMin = 0;
+
+        Object.values(PLANS_CATALOG).forEach(plan => {
+            const pData = appState.plansData[plan.id];
+            if (!pData) return;
+
+            plan.weeks.forEach(w => {
+                w.sessions.forEach((sess, idx) => {
+                    const run = pData[w.week][idx];
+                    if (run) {
+                        const dist = parseFloat(run.distance || 0);
+                        const activeMin = run.actualMinutes || sess.estMin;
+                        cachedEntries.push({
+                            planId: plan.id,
+                            planName: plan.shortName,
+                            weekTitle: w.title,
+                            sessionTitle: sess.title,
+                            sessionDesc: sess.desc,
+                            activeMin,
+                            ...run
+                        });
+                        totalKm += dist;
+                        totalMin += activeMin;
+                    }
+                });
+            });
+        });
+
+        cachedEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        document.getElementById('stat-total-runs').textContent = cachedEntries.length;
+        document.getElementById('stat-total-km').textContent = `${totalKm.toFixed(2)} km`;
+        document.getElementById('stat-total-min').textContent = `${totalMin} min`;
+
+        renderDistanceChart(cachedEntries);
+
+        if (cachedEntries.length === 0) {
+            listEl.innerHTML = `
+                <div class="empty-state">
+                    <div style="font-size:2rem; margin-bottom:8px;">👟</div>
+                    <p>Aucune séance enregistrée pour le moment.</p>
+                    <p style="font-size:0.78rem; margin-top:4px;">Lance un chrono ▶️ ou coche une séance pour alimenter ton journal !</p>
+                </div>
+            `;
+            return;
+        }
+
+        cachedEntries.forEach((entry, index) => {
+            const card = document.createElement('div');
+            card.className = 'history-card';
+            const mapId = `hist-map-${index}`;
+            const hasRoute = entry.route && entry.route.length > 1;
+            const feelingEmoji = entry.feeling === 'Facile' ? '😊' : entry.feeling === 'Difficile' ? '🥵' : '😐';
+
+            card.innerHTML = `
+                <div class="history-top">
+                    <div class="history-title">${entry.planName} • ${entry.sessionTitle}</div>
+                    <div class="history-date">${entry.date.split('-').reverse().join('/')}</div>
+                </div>
+                <div class="history-tags">
+                    <span class="h-tag">${feelingEmoji} ${entry.feeling}</span>
+                    ${entry.distance ? `<span class="h-tag">📍 ${parseFloat(entry.distance).toFixed(2)} km</span>` : ''}
+                    ${entry.runPace ? `<span class="h-tag">⚡ Course : ${entry.runPace}</span>` : ''}
+                    <span class="h-tag">⏱️ ${entry.activeMin} min</span>
+                    ${hasRoute ? `<button class="gpx-btn" onclick="downloadGPX(${index})">⬇️ Export GPX</button>` : ''}
+                </div>
+                ${entry.notes ? `<div class="history-note">"${entry.notes}"</div>` : ''}
+                ${hasRoute ? `<div id="${mapId}" class="history-map"></div>` : ''}
+            `;
+            listEl.appendChild(card);
+
+            if (hasRoute && typeof L !== 'undefined') {
+                setTimeout(() => {
+                    const map = L.map(mapId, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false });
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+                    const polyline = L.polyline(entry.route, { color: '#fc4c02', weight: 4.5, opacity: 0.95 }).addTo(map);
+                    map.fitBounds(polyline.getBounds(), { padding: [15, 15] });
+                    historyMaps.push(map);
+                }, 60);
+            }
+        });
+    }
+
+    function renderDistanceChart(entries) {
+        const chartCard = document.getElementById('chart-container');
+        const chartBox = document.getElementById('svg-chart-box');
+
+        // Prendre les 10 dernières sorties avec distance > 0 dans l'ordre chronologique
+        const validRuns = [...entries]
+            .filter(e => parseFloat(e.distance) > 0)
+            .reverse()
+            .slice(-10);
+
+        if (validRuns.length < 2) {
+            chartCard.style.display = 'none';
+            return;
+        }
+
+        chartCard.style.display = 'block';
+        const maxDist = Math.max(...validRuns.map(r => parseFloat(r.distance)));
+        document.getElementById('chart-max-lbl').textContent = `Record : ${maxDist.toFixed(2)} km`;
+
+        const w = 380;
+        const h = 110;
+        const padX = 20;
+        const padY = 18;
+
+        const points = validRuns.map((r, i) => {
+            const x = padX + (i / (validRuns.length - 1)) * (w - padX * 2);
+            const y = h - padY - ((parseFloat(r.distance) / maxDist) * (h - padY * 2));
+            return { x, y, dist: parseFloat(r.distance).toFixed(1), date: r.date.slice(5).split('-').reverse().join('/') };
+        });
+
+        const polylinePoints = points.map(p => `${p.x},${p.y}`).join(' ');
+
+        chartBox.innerHTML = `
+            <svg viewBox="0 0 ${w} ${h}" style="width:100%; height:auto; overflow:visible;">
+                <polyline fill="none" stroke="#fc4c02" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${polylinePoints}" />
+                ${points.map(p => `
+                    <circle cx="${p.x}" cy="${p.y}" r="4.5" fill="#10b981" stroke="#0f172a" stroke-width="1.5" />
+                    <text x="${p.x}" y="${p.y - 8}" fill="#f8fafc" font-size="9" font-weight="bold" text-anchor="middle">${p.dist}</text>
+                    <text x="${p.x}" y="${h - 2}" fill="#94a3b8" font-size="8" text-anchor="middle">${p.date}</text>
+                `).join('')}
+            </svg>
+        `;
+    }
+
+    function downloadGPX(entryIndex) {
+        const entry = cachedEntries[entryIndex];
+        if (!entry || !entry.route || entry.route.length < 2) return;
+
+        const trkpts = entry.route.map(pt => `      <trkpt lat="${pt[0]}" lon="${pt[1]}"></trkpt>`).join('
+');
+        const gpxContent = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="RunningCoachPro" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>${entry.planName} - ${entry.sessionTitle}</name>
+    <time>${entry.date}T08:00:00Z</time>
+  </metadata>
+  <trk>
+    <name>${entry.sessionTitle}</name>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+
+        const blob = new Blob([gpxContent], { type: 'application/gpx+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `run_${entry.date}_${entry.planId}.gpx`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    /* ==========================================================================
+       5. MODALE VALIDATION SÉANCE (LOG MODAL)
+       ========================================================================== */
+    let currentEdit = { planId: null, week: null, runIdx: null, selectedFeeling: 'Moyen', extraData: {} };
+
+    function openLogModal(planId, week, runIdx, prefillData = null) {
+        currentEdit.planId = planId;
+        currentEdit.week = week;
+        currentEdit.runIdx = runIdx;
+        const existing = appState.plansData[planId][week][runIdx];
+        const sessMeta = PLANS_CATALOG[planId].weeks.find(w => w.week === week).sessions[runIdx];
+
+        document.getElementById('log-modal-title').textContent = `${sessMeta.title} (Sem. ${week})`;
+        document.getElementById('log-delete-btn').style.display = existing ? 'block' : 'none';
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        document.getElementById('log-date').value = prefillData?.date || existing?.date || todayStr;
+        document.getElementById('log-distance').value = prefillData?.distance || existing?.distance || '';
+        document.getElementById('log-notes').value = prefillData?.notes || existing?.notes || '';
+
+        currentEdit.extraData = {
+            route: prefillData?.route || existing?.route || null,
+            runPace: prefillData?.runPace || existing?.runPace || null,
+            actualMinutes: prefillData?.actualMinutes || existing?.actualMinutes || null
+        };
+
+        selectFeeling(prefillData?.feeling || existing?.feeling || 'Moyen');
+        document.getElementById('log-modal').classList.add('active');
+    }
+
+    function closeLogModal() {
+        document.getElementById('log-modal').classList.remove('active');
+    }
+
+    function selectFeeling(val) {
+        currentEdit.selectedFeeling = val;
+        document.querySelectorAll('.feeling-btn').forEach(btn => {
+            btn.classList.toggle('selected', btn.dataset.val === val);
+        });
+    }
+
+    function saveRunLog() {
+        const { planId, week, runIdx, selectedFeeling, extraData } = currentEdit;
+        const wasComplete = appState.plansData[planId][week].filter(Boolean).length === 3;
+
+        appState.plansData[planId][week][runIdx] = {
+            date: document.getElementById('log-date').value || new Date().toISOString().split('T')[0],
+            feeling: selectedFeeling,
+            distance: document.getElementById('log-distance').value,
+            notes: document.getElementById('log-notes').value.trim(),
+            route: extraData.route,
+            runPace: extraData.runPace,
+            actualMinutes: extraData.actualMinutes
+        };
+
+        const isNowComplete = appState.plansData[planId][week].filter(Boolean).length === 3;
+        saveStorage();
+        closeLogModal();
+        renderPlan();
+
+        if (!wasComplete && isNowComplete) {
+            launchConfetti();
+        }
+    }
+
+    function uncheckRun() {
+        const { planId, week, runIdx } = currentEdit;
+        appState.plansData[planId][week][runIdx] = null;
+        saveStorage();
+        closeLogModal();
+        renderPlan();
+    }
+
+    /* ==========================================================================
+       6. CHRONOMÈTRE HAUTE PRÉCISION (Date.now), COACH VOCAL, WAKE LOCK & GPS
+       ========================================================================== */
+    let timerOptions = {
+        voice: true,
+        autopause: true
+    };
+
+    let wakeLockSentinel = null;
+
+    async function requestWakeLock() {
+        try {
+            if ('wakeLock' in navigator) {
+                wakeLockSentinel = await navigator.wakeLock.request('screen');
+                document.getElementById('chip-wakelock').classList.add('active');
+            }
+        } catch (err) {
+            document.getElementById('chip-wakelock').classList.remove('active');
+        }
+    }
+
+    function releaseWakeLock() {
+        if (wakeLockSentinel) {
+            wakeLockSentinel.release().catch(() => {});
+            wakeLockSentinel = null;
+        }
+    }
+
+    function toggleOption(opt) {
+        timerOptions[opt] = !timerOptions[opt];
+        document.getElementById(`chip-${opt}`).classList.toggle('active', timerOptions[opt]);
+        if (opt === 'voice' && timerOptions.voice) {
+            speakCoach("Coach vocal activé");
+        }
+    }
+
+    function speakCoach(text) {
+        if (!timerOptions.voice || !('speechSynthesis' in window)) return;
+        try {
+            window.speechSynthesis.cancel();
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.lang = 'fr-FR';
+            utter.rate = 1.05;
+            window.speechSynthesis.speak(utter);
+        } catch (e) {}
+    }
+
+    let timerState = {
+        planId: null,
+        weekNum: null,
+        sessIdx: null,
+        sessionData: null,
+        currentRep: 1,
+        isRunPhase: true,
+        phaseRemainingMs: 60000,
+        lastTickTimestamp: null,
+        elapsedTotalMs: 0,
+        elapsedRunMs: 0,
+        intervalId: null,
+        isRunning: false,
+        isAutoPaused: false
+    };
+
+    let gpsState = {
+        watchId: null,
+        coords: [],
+        totalDistanceKm: 0,
+        runDistanceKm: 0,
+        currentSpeedKmh: 0,
+        lowSpeedCounter: 0,
+        map: null,
+        polyline: null,
+        marker: null
+    };
+
+    function calcDistanceKm(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    function startGPSTracking() {
+        if (!("geolocation" in navigator)) {
+            document.getElementById('gps-status-text').textContent = "❌ GPS non supporté.";
+            return;
+        }
+        document.getElementById('gps-status-text').textContent = "🛰️ Acquisition satellite...";
+
+        if (!gpsState.map && typeof L !== 'undefined') {
+            gpsState.map = L.map('live-map', { zoomControl: false, attributionControl: false }).setView([46.603354, 1.888334], 5);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(gpsState.map);
+            gpsState.polyline = L.polyline([], { color: '#fc4c02', weight: 4.5, opacity: 0.95 }).addTo(gpsState.map);
+        }
+        setTimeout(() => gpsState.map && gpsState.map.invalidateSize(), 100);
+
+        gpsState.watchId = navigator.geolocation.watchPosition(
+            (pos) => {
+                const { latitude, longitude, accuracy, speed } = pos.coords;
+                document.getElementById('gps-status-text').textContent = `🛰️ GPS Actif (±${Math.round(accuracy)}m)`;
+
+                const newPt = [latitude, longitude];
+                if (gpsState.map) {
+                    if (!gpsState.marker) {
+                        gpsState.marker = L.circleMarker(newPt, { radius: 8, color: '#ffffff', fillColor: '#fc4c02', fillOpacity: 1, weight: 2 }).addTo(gpsState.map);
+                        gpsState.map.setView(newPt, 17);
+                    } else {
+                        gpsState.marker.setLatLng(newPt);
+                        gpsState.map.panTo(newPt);
+                    }
+                }
+
+                // Gestion Auto-Pause intelligente
+                const speedKmh = (speed !== null && speed >= 0) ? speed * 3.6 : gpsState.currentSpeedKmh;
+                if (timerOptions.autopause && timerState.isRunning && !timerState.isAutoPaused) {
+                    if (speed !== null && speedKmh < 1.5 && gpsState.coords.length > 3) {
+                        gpsState.lowSpeedCounter++;
+                        if (gpsState.lowSpeedCounter >= 4) {
+                            timerState.isAutoPaused = true;
+                            speakCoach("Pause automatique");
+                            updateTimerUI();
+                        }
+                    } else {
+                        gpsState.lowSpeedCounter = 0;
+                    }
+                } else if (timerOptions.autopause && timerState.isAutoPaused) {
+                    if (speed !== null && speedKmh >= 2.2) {
+                        timerState.isAutoPaused = false;
+                        timerState.lastTickTimestamp = Date.now();
+                        gpsState.lowSpeedCounter = 0;
+                        speakCoach("Reprise");
+                        updateTimerUI();
+                    }
+                }
+
+                // Enregistrement du tracé
+                if (timerState.isRunning && !timerState.isAutoPaused && accuracy <= 40) {
+                    if (gpsState.coords.length > 0) {
+                        const prev = gpsState.coords[gpsState.coords.length - 1];
+                        const d = calcDistanceKm(prev[0], prev[1], latitude, longitude);
+                        if (d > 0.002) {
+                            gpsState.totalDistanceKm += d;
+                            if (timerState.isRunPhase) {
+                                gpsState.runDistanceKm += d;
+                            }
+                            gpsState.coords.push(newPt);
+                            if (gpsState.polyline) gpsState.polyline.setLatLngs(gpsState.coords);
+                        }
+                    } else {
+                        gpsState.coords.push(newPt);
+                        if (gpsState.polyline) gpsState.polyline.setLatLngs(gpsState.coords);
+                    }
+                    updateStravaMetricsUI();
+                }
+            },
+            () => {
+                document.getElementById('gps-status-text').textContent = "⚠️ Autorise la localisation GPS dans Safari.";
+            },
+            { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+        );
+    }
+
+    function stopGPSTracking() {
+        if (gpsState.watchId !== null) {
+            navigator.geolocation.clearWatch(gpsState.watchId);
+            gpsState.watchId = null;
+        }
+    }
+
+    function resetGPSData() {
+        gpsState.coords = [];
+        gpsState.totalDistanceKm = 0;
+        gpsState.runDistanceKm = 0;
+        gpsState.lowSpeedCounter = 0;
+        if (gpsState.polyline) gpsState.polyline.setLatLngs([]);
+        if (gpsState.marker && gpsState.map) {
+            gpsState.map.removeLayer(gpsState.marker);
+            gpsState.marker = null;
+        }
+        updateStravaMetricsUI();
+    }
+
+    function formatPace(distKm, timeSec) {
+        if (distKm < 0.03 || timeSec < 8) return `--'--"/km`;
+        const paceMinPerKm = (timeSec / 60) / distKm;
+        if (paceMinPerKm > 25) return `--'--"/km`;
+        const mins = Math.floor(paceMinPerKm);
+        const secs = Math.round((paceMinPerKm - mins) * 60).toString().padStart(2, '0');
+        return `${mins}'${secs}"/km`;
+    }
+
+    function updateStravaMetricsUI() {
+        const totalSec = Math.floor(timerState.elapsedTotalMs / 1000);
+        const runSec = Math.floor(timerState.elapsedRunMs / 1000);
+
+        document.getElementById('strava-dist').textContent = `${gpsState.totalDistanceKm.toFixed(2)} km`;
+        document.getElementById('strava-chrono').textContent = formatTime(totalSec);
+        document.getElementById('strava-run-time').textContent = formatTime(runSec);
+
+        // Allure Course Pure vs Allure Globale
+        document.getElementById('strava-run-pace').textContent = formatPace(gpsState.runDistanceKm, runSec);
+        document.getElementById('strava-global-pace').textContent = formatPace(gpsState.totalDistanceKm, totalSec);
+
+        let speedKmh = 0;
+        if (totalSec > 4 && gpsState.totalDistanceKm > 0) {
+            speedKmh = gpsState.totalDistanceKm / (totalSec / 3600);
+        }
+        gpsState.currentSpeedKmh = speedKmh;
+        document.getElementById('strava-speed').textContent = `${speedKmh.toFixed(1)} km/h`;
+    }
+
+    function triggerAlertAndVoice(isTransitionToRun, messageText) {
+        if (navigator.vibrate) {
+            navigator.vibrate([300, 150, 300, 150, 400]);
+        }
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const now = ctx.currentTime;
+            const freq = isTransitionToRun ? 880 : 523.25;
+            for (let i = 0; i < 3; i++) {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq + (i * 150), now + (i * 0.15));
+                gain.gain.setValueAtTime(0.2, now + (i * 0.15));
+                gain.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.15) + 0.12);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + (i * 0.15));
+                osc.stop(now + (i * 0.15) + 0.12);
+            }
+        } catch (e) {}
+
+        if (messageText) {
+            setTimeout(() => speakCoach(messageText), 450);
+        }
+    }
+
+    function formatTime(sec) {
+        const m = Math.floor(sec / 60).toString().padStart(2, '0');
+        const s = (sec % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    }
+
+    function updateTimerUI() {
+        const { sessionData, currentRep, isRunPhase, phaseRemainingMs, isRunning, isAutoPaused } = timerState;
+        const secLeft = Math.max(0, Math.ceil(phaseRemainingMs / 1000));
+
+        document.getElementById('modal-week-title').textContent = `${sessionData.title} • ${sessionData.type}`;
+        document.getElementById('modal-time').textContent = formatTime(secLeft);
+        document.getElementById('modal-rep').textContent = sessionData.reps > 1
+            ? `Bloc ${currentRep} / ${sessionData.reps}`
+            : `Séance continue`;
+
+        const phaseEl = document.getElementById('modal-phase');
+        if (secLeft === 0 && currentRep === sessionData.reps && !isRunPhase) {
+            phaseEl.textContent = "TERMINÉ ! 🎉";
+            phaseEl.className = "phase-badge phase-done";
+        } else if (isAutoPaused) {
+            phaseEl.textContent = "⏸️ AUTO-PAUSE";
+            phaseEl.className = "phase-badge phase-paused";
+        } else if (isRunPhase) {
+            phaseEl.textContent = "🏃‍♂️ COURSE";
+            phaseEl.className = "phase-badge phase-run";
+        } else {
+            phaseEl.textContent = "🚶‍♂️ MARCHE / RÉCUP";
+            phaseEl.className = "phase-badge phase-walk";
+        }
+
+        const toggleBtn = document.getElementById('modal-toggle-btn');
+        toggleBtn.textContent = isRunning ? "Pause" : "Démarrer";
+        toggleBtn.className = `ctrl-btn ${isRunning ? 'btn-pause' : 'btn-start'}`;
+
+        document.getElementById('modal-finish-btn').style.display = timerState.elapsedTotalMs > 5000 ? 'block' : 'none';
+    }
+
+    function openTimer(planId, weekNum, sessIdx) {
+        const weekObj = PLANS_CATALOG[planId].weeks.find(w => w.week === weekNum);
+        timerState.planId = planId;
+        timerState.weekNum = weekNum;
+        timerState.sessIdx = sessIdx;
+        timerState.sessionData = weekObj.sessions[sessIdx];
+
+        resetTimer();
+        document.getElementById('timer-modal').classList.add('active');
+        startGPSTracking();
+        requestWakeLock();
+    }
+
+    function closeTimer() {
+        clearInterval(timerState.intervalId);
+        timerState.isRunning = false;
+        stopGPSTracking();
+        releaseWakeLock();
+        document.getElementById('timer-modal').classList.remove('active');
+    }
+
+    function resetTimer() {
+        clearInterval(timerState.intervalId);
+        timerState.isRunning = false;
+        timerState.isAutoPaused = false;
+        timerState.currentRep = 1;
+        timerState.isRunPhase = true;
+        timerState.phaseRemainingMs = timerState.sessionData.runSec * 1000;
+        timerState.elapsedTotalMs = 0;
+        timerState.elapsedRunMs = 0;
+        resetGPSData();
+        updateTimerUI();
+    }
+
+    function toggleTimer() {
+        if (timerState.isRunning) {
+            clearInterval(timerState.intervalId);
+            timerState.isRunning = false;
+            timerState.isAutoPaused = false;
+            updateTimerUI();
+            return;
+        }
+
+        if (timerState.elapsedTotalMs === 0) {
+            const mins = Math.round(timerState.sessionData.runSec / 60);
+            speakCoach(mins >= 1 ? `C'est parti pour ${mins} minutes de course` : `C'est parti`);
+        }
+
+        timerState.isRunning = true;
+        timerState.isAutoPaused = false;
+        timerState.lastTickTimestamp = Date.now();
+        requestWakeLock();
+        updateTimerUI();
+
+        // Boucle haute précision basée sur l'horloge système (Date.now)
+        timerState.intervalId = setInterval(() => {
+            const now = Date.now();
+            const deltaMs = now - timerState.lastTickTimestamp;
+            timerState.lastTickTimestamp = now;
+
+            if (timerState.isAutoPaused) return;
+
+            timerState.elapsedTotalMs += deltaMs;
+            if (timerState.isRunPhase) {
+                timerState.elapsedRunMs += deltaMs;
+            }
+            timerState.phaseRemainingMs -= deltaMs;
+
+            updateStravaMetricsUI();
+
+            if (timerState.phaseRemainingMs > 0) {
+                updateTimerUI();
+            } else {
+                // Transition de phase
+                if (timerState.isRunPhase && timerState.sessionData.walkSec > 0) {
+                    timerState.isRunPhase = false;
+                    timerState.phaseRemainingMs = timerState.sessionData.walkSec * 1000;
+                    const wMin = Math.round(timerState.sessionData.walkSec / 60);
+                    triggerAlertAndVoice(false, `Passe en marche pendant ${wMin} minute${wMin > 1 ? 's' : ''}`);
+                } else {
+                    if (timerState.currentRep < timerState.sessionData.reps) {
+                        timerState.currentRep++;
+                        timerState.isRunPhase = true;
+                        timerState.phaseRemainingMs = timerState.sessionData.runSec * 1000;
+                        const rMin = Math.round(timerState.sessionData.runSec / 60);
+                        triggerAlertAndVoice(true, `Bloc ${timerState.currentRep}. Reprends la course pendant ${rMin} minute${rMin > 1 ? 's' : ''}`);
+                    } else {
+                        completeWorkoutAndLog();
+                        return;
+                    }
+                }
+                updateTimerUI();
+            }
+        }, 250);
+    }
+
+    function finishSessionEarly() {
+        if (confirm("Terminer la séance maintenant et enregistrer tes données ?")) {
+            completeWorkoutAndLog();
+        }
+    }
+
+    function completeWorkoutAndLog() {
+        timerState.phaseRemainingMs = 0;
+        timerState.isRunPhase = false;
+        clearInterval(timerState.intervalId);
+        timerState.isRunning = false;
+        triggerAlertAndVoice(true, "Séance terminée ! Bravo pour ton effort.");
+        updateTimerUI();
+        launchConfetti();
+
+        const { planId, weekNum, sessIdx } = timerState;
+        const recordedDist = gpsState.totalDistanceKm > 0 ? gpsState.totalDistanceKm.toFixed(2) : '';
+        const recordedRoute = gpsState.coords.length > 1 ? [...gpsState.coords] : null;
+        const runSec = Math.floor(timerState.elapsedRunMs / 1000);
+        const runPaceStr = gpsState.runDistanceKm > 0.03 ? formatPace(gpsState.runDistanceKm, runSec) : null;
+        const actualMin = Math.max(1, Math.round(timerState.elapsedTotalMs / 60000));
+
+        setTimeout(() => {
+            closeTimer();
+            openLogModal(planId, weekNum, sessIdx, {
+                distance: recordedDist,
+                route: recordedRoute,
+                runPace: runPaceStr,
+                actualMinutes: actualMin
+            });
+        }, 1400);
+    }
+
+    /* ==========================================================================
+       7. SAUVEGARDE JSON, IMPORT & RESET
+       ========================================================================== */
+    function exportBackupJSON() {
+        const dataStr = JSON.stringify(appState, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const dateStr = new Date().toISOString().split('T')[0];
+        a.href = url;
+        a.download = `running_coach_backup_${dateStr}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function importBackupJSON(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+                if (imported && imported.plansData) {
+                    appState = imported;
+                    Object.keys(PLANS_CATALOG).forEach(ensurePlanInitialized);
+                    saveStorage();
+                    renderPlanSelector();
+                    renderPlan();
+                    alert("Sauvegarde restaurée avec succès !");
+                } else {
+                    alert("Fichier JSON invalide.");
+                }
+            } catch (err) {
+                alert("Erreur lors de la lecture du fichier.");
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function resetCurrentPlan() {
+        const plan = PLANS_CATALOG[appState.activePlanId];
+        if (confirm(`Remettre à zéro toutes les séances du plan "${plan.shortName}" ?`)) {
+            appState.plansData[plan.id] = { 1: [null, null, null], 2: [null, null, null], 3: [null, null, null], 4: [null, null, null] };
+            saveStorage();
+            renderPlan();
+        }
+    }
+
+    function resetAllData() {
+        if (confirm("Attention : cela effacera tous tes plans et tout ton historique GPS. Continuer ?")) {
+            localStorage.removeItem(STORAGE_KEY);
+            appState = { activePlanId: 'reprise', plansData: {} };
+            Object.keys(PLANS_CATALOG).forEach(ensurePlanInitialized);
+            saveStorage();
+            renderPlanSelector();
+            renderPlan();
+        }
+    }
+
+    /* ==========================================================================
+       8. CONFETTIS
+       ========================================================================== */
+    function launchConfetti() {
+        const canvas = document.getElementById('confetti-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const particles = Array.from({ length: 75 }, () => ({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height - canvas.height,
+            r: Math.random() * 6 + 4,
+            d: Math.random() * 4 + 2,
+            color: ['#fc4c02', '#10b981', '#3b82f6', '#f59e0b', '#34d399'][Math.floor(Math.random() * 5)]
+        }));
+
+        let frame = 0;
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => {
+                p.y += p.d;
+                p.x += Math.sin(frame * 0.05) * 1.5;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            frame++;
+            if (frame < 130) {
+                requestAnimationFrame(animate);
+            } else {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+        animate();
+    }
+
+    // Initialisation au chargement
+    renderPlanSelector();
+    renderPlan();
+</script>
+</body>
+</html>
